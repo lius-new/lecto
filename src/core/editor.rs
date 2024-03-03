@@ -1,12 +1,14 @@
 ///internal crate
 use super::{
     constants,
+    document::Document,
     processor::Processor,
+    row::Row,
     terminal::Terminal,
     utils::{self, die},
 };
 ///external crate
-use std::{cell::RefCell, io::stdout};
+use std::{cell::RefCell, io::stdout, usize};
 use termion::{event::Key, raw::IntoRawMode};
 
 /// 编辑器中光标位置
@@ -32,15 +34,24 @@ pub struct Editor {
     cursor_position: RefCell<Position>,
     terminal: Terminal,
     processor: Processor,
+    document: Document,
 }
 impl Default for Editor {
     fn default() -> Self {
+        // 通过是否存在filename参数来构建不同的Document实例
+        let document = if let Some(filename) = Processor::read_filename_for_command() {
+            Document::open(&filename).unwrap_or_default()
+        } else {
+            Document::default()
+        };
+
         Self {
             should_quit: RefCell::new(false),
             show_welcome: RefCell::new(true),
             cursor_position: RefCell::new(Position::default()),
             terminal: Terminal::default(),
             processor: Processor::default(),
+            document,
         }
     }
 }
@@ -93,6 +104,14 @@ impl Editor {
         self.terminal.flush()
     }
 
+    /// 如果是文档，那么绘制文档行(这里文档指文件)
+    pub fn draw_document_row(&self, row: &Row) {
+        let start = 0;
+        let end = self.terminal.size().width as usize;
+        let row = row.render(start, end);
+        self.terminal.draw_row(&row);
+    }
+
     /// 绘制开始描述
     pub fn draw_welcome_message(&self) {
         self.terminal
@@ -110,7 +129,12 @@ impl Editor {
         let height = self.terminal.size().height;
         for terminal_row in 0..height - 1 {
             self.terminal.clear_current_line();
-            if terminal_row == height / 2 && self.get_show_welcome() {
+            if let Some(row) = self.document.row(terminal_row as usize) {
+                self.draw_document_row(row);
+            } else if terminal_row == height / 2
+                && self.get_show_welcome()
+                && self.document.is_empty()
+            {
                 self.draw_welcome_message();
             } else {
                 self.terminal.draw_row("~");

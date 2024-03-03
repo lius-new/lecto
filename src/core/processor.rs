@@ -1,5 +1,5 @@
 ///external crate
-use std::io;
+use std::{env, io};
 use termion::{event::Key, input::TermRead};
 
 /// 处理器类型
@@ -23,5 +23,11 @@ impl Processor {
                 return key;
             }
         }
+    }
+
+    /// 读取命令行参数
+    pub fn read_filename_for_command() -> Option<String> {
+        let args: Vec<String> = env::args().collect();
+        Some(String::from(args.get(1)?))
     }
 }
