@@ -31,8 +31,8 @@ impl Position {
 pub struct Editor {
     should_quit: RefCell<bool>,
     show_welcome: RefCell<bool>,
-    cursor_position: RefCell<Position>,
-    offset: RefCell<Position>,
+    cursor_position: RefCell<Position>, // 光标位置, 读文件时是光标在文本中的位置
+    offset: RefCell<Position>,          // 读文件时文本在窗口中文档的偏移量
     terminal: Terminal,
     processor: Processor,
     document: Document,
@@ -102,6 +102,9 @@ impl Editor {
         self.terminal.cursor_hide();
         self.terminal.cursor_position(&Position::default());
         self.draw_start_running_symbol();
+        // 设置光标的位置, 此时光标和文本偏移绑定到一起了.
+        // 假设正如scroll方法描述, 当向下碰到边界并越过时(第一次碰到)，此时y = 8, offset = 1,所以光标为 8 -1 = 7, 此时光标就是为最后一行位置. 如果一直就y=9 offset = 2,光标7,...
+        // 假设正如scroll方法描述, 当向上碰到边界并越过时，此时y = 0, offset = 1,所以光标为 0 - 1 = 0 (saturating_sub), 此时光标是为第一行位置. 如果一直就y=0 offset = 0,光标0,...
         self.terminal.cursor_position(&self.get_cursor_position());
         self.terminal.cursor_show();
         self.terminal.flush()
@@ -136,6 +139,12 @@ impl Editor {
         let height = self.terminal.size().height;
         for terminal_row in 0..height - 1 {
             self.terminal.clear_current_line();
+
+            // 如果有绘制内容就绘制(每次移动窗口内容都会重新绘制. 实际上只有offset.y发生变化才会导致现实的内容的重新绘制)
+            // 绘制的内容是当前终端位置(窗口位置)加上光标所在文本的位置(显示位置). 比如开始状态下都在1,
+            // 那么从上至下正常显示。1-1，2-2，3-3=>窗口第一行显示文本第一行,窗口第二行显示文本第二行,...
+            // 当向下移动到第8行时为: 1-8，2-9，3-10=>窗口第一行显示文本第八行,窗口第二行显示文本第九行,...
+            // 当向上移动到第7行时为: 1-7，2-8，3-9=>窗口第一行显示文本第七行,窗口第二行显示文本第八行,...
             if let Some(row) = self
                 .document
                 .row(terminal_row as usize + self.get_offset().y)
@@ -152,7 +161,16 @@ impl Editor {
         }
     }
 
-    /// 文档翻页
+    /// 文档上下翻动
+    /// 修改文本的偏移量从而实现在窗口位置的变化
+    /// cursor_position表示光标在文本的位置
+    /// width,height表示终端(可视)大小
+    /// offset: 表示文本偏移量,默认是0, 因为调用的是default()
+    /// 假设光标开始向下移动, 当y = 1时, 对于y的判断条件(if 1 < 0 & else if 1 > 8)均不成立,且此后移动7次光标都不会导致文本显示变化(此处假设height=8)
+    /// 假设光标开始向下移动, 当y = 8时, 对于y的判断条件(if 8 < 0 & else if 8 > 8)后者成立,此时窗口中的内容就会改变, 因为offset.y改变(y - height + 1 = 1)了. 那么导致draw_rows方法改变.
+    /// 假设光标开始向上移动, 当y = 7时, 对于y的判断条件(if 7 < 1 & else if 7 > 8)均不成立,且此后移动7次光标都不会导致文本显示变化(此处假设height=8)
+    /// 假设光标开始向上移动, 当y = 0时, 对于y的判断条件(if 0 < 1 & else if 0 > 8)前者成立,此时窗口中的内容就会改变, 因为offset.y改变(y = offset.y = 0)了. 那么导致draw_rows方法改变.
+    /// 那么实际上只有当到最上面一行或最下面一行再进行往上面移动或者往下面移动才会导致offset.y发生变化
     pub fn scroll(&self) {
         let Position { x, y } = self.get_cursor_position();
         let width = self.terminal.size().width as usize;
