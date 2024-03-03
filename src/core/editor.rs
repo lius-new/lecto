@@ -13,7 +13,7 @@ use termion::{event::Key, raw::IntoRawMode};
 
 /// 编辑器中光标位置
 #[derive(Default, Clone, Copy, Debug)]
-pub(crate) struct Position {
+pub struct Position {
     pub(crate) x: usize,
     pub(crate) y: usize,
 }
@@ -32,6 +32,7 @@ pub struct Editor {
     should_quit: RefCell<bool>,
     show_welcome: RefCell<bool>,
     cursor_position: RefCell<Position>,
+    offset: RefCell<Position>,
     terminal: Terminal,
     processor: Processor,
     document: Document,
@@ -49,6 +50,7 @@ impl Default for Editor {
             should_quit: RefCell::new(false),
             show_welcome: RefCell::new(true),
             cursor_position: RefCell::new(Position::default()),
+            offset: RefCell::new(Position::default()),
             terminal: Terminal::default(),
             processor: Processor::default(),
             document,
@@ -90,8 +92,9 @@ impl Editor {
             | Key::PageDown
             | Key::End
             | Key::Home => self.move_cursor(key),
-            _ => println!("{:?}\r", key),
+            _ => (),
         }
+        self.scroll()
     }
 
     /// 刷新文本编辑器屏幕
@@ -105,9 +108,13 @@ impl Editor {
     }
 
     /// 如果是文档，那么绘制文档行(这里文档指文件)
+    /// 渲染文本的宽度(第一个字符=(offset.x=0)): 即start=0,end=0+width,渲染文本是render(0,width)=>text[0,min(width,text_len)], 得出结论: 要么终端长度要么文本长度. 正常显示
+    /// 渲染文本的宽度(第五个字符=(offset.x=4)): 即start=4,end=4+width,渲染文本是render(4,4+width)=>text[4,min(4+width,text_len)],
     pub fn draw_document_row(&self, row: &Row) {
-        let start = 0;
-        let end = self.terminal.size().width as usize;
+        let width = self.terminal.size().width as usize;
+        let x = self.get_offset().x;
+        let start = x;
+        let end = x + width;
         let row = row.render(start, end);
         self.terminal.draw_row(&row);
     }
@@ -129,7 +136,10 @@ impl Editor {
         let height = self.terminal.size().height;
         for terminal_row in 0..height - 1 {
             self.terminal.clear_current_line();
-            if let Some(row) = self.document.row(terminal_row as usize) {
+            if let Some(row) = self
+                .document
+                .row(terminal_row as usize + self.get_offset().y)
+            {
                 self.draw_document_row(row);
             } else if terminal_row == height / 2
                 && self.get_show_welcome()
@@ -141,12 +151,37 @@ impl Editor {
             }
         }
     }
+
+    /// 文档翻页
+    pub fn scroll(&self) {
+        let Position { x, y } = self.get_cursor_position();
+        let width = self.terminal.size().width as usize;
+        let height = self.terminal.size().height as usize;
+        let mut offset = self.offset.borrow_mut();
+
+        if y < offset.y {
+            offset.set_position_y(y);
+        } else if y >= offset.y.saturating_add(height) {
+            offset.set_position_y(y.saturating_sub(height).saturating_add(1));
+        }
+
+        if x < offset.x {
+            offset.set_position_x(x);
+        } else if x >= offset.x.saturating_add(width) {
+            offset.set_position_x(x.saturating_sub(width).saturating_add(1));
+        }
+    }
+
     /// 移动光标
     pub fn move_cursor(&self, key: Key) {
         let mut cursor_postion = self.cursor_position.borrow_mut();
         let (x, y) = (cursor_postion.x, cursor_postion.y);
 
-        let height = self.terminal.size().height.saturating_sub(1) as usize;
+        let height = if !self.document.is_empty() {
+            self.document.len()
+        } else {
+            self.terminal.size().height.saturating_sub(1) as usize
+        };
         let width = self.terminal.size().width.saturating_sub(1) as usize;
         match key {
             Key::Up => cursor_postion.set_position_y(y.saturating_sub(1)),
@@ -186,5 +221,9 @@ impl Editor {
     /// 获取光标位置
     fn get_cursor_position(&self) -> Position {
         *self.cursor_position.borrow()
+    }
+    /// 获取offset(偏移量)
+    fn get_offset(&self) -> Position {
+        *self.offset.borrow()
     }
 }

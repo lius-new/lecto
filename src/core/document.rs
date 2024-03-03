@@ -14,7 +14,7 @@ impl Document {
         let mut rows = Vec::new();
 
         for value in contents.lines() {
-            rows.push(Row::from(value))
+            rows.push(Row::from(value));
         }
 
         Ok(Self { rows })
@@ -28,5 +28,10 @@ impl Document {
     /// 判断文档是否为空
     pub fn is_empty(&self) -> bool {
         self.rows.is_empty()
+    }
+
+    /// 文档长度(多少行)
+    pub fn len(&self) -> usize {
+        self.rows.len()
     }
 }

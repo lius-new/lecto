@@ -6,6 +6,7 @@ use std::{
 
 use super::editor::Position;
 
+#[derive(Debug)]
 pub struct Size {
     pub width: u16,
     pub height: u16,
