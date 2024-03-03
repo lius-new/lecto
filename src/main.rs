@@ -1,27 +1,27 @@
-use std::{
-    io::{self, stdout, Read},
-    process,
-};
+use std::io::{self, stdout};
 
-use termion::raw::IntoRawMode;
+use termion::{event::Key, input::TermRead, raw::IntoRawMode};
+
+fn die(error: std::io::Error) {
+    panic!("{:?}", error)
+}
 
 fn main() -> Result<(), Box<io::Error>> {
     let _stdout = stdout().into_raw_mode()?;
 
-    for b in io::stdin().bytes() {
-        let b = b.unwrap();
-        let c = b as char; // 为什么不是 b.unwrap() as char; 因为unwrap(self)即所有权被函数获取
-        println!("{:?}", c);
-
-        // 判断是否是控制字符
-        if c.is_control() {
-            println!("{:?}\r", b);
-        } else {
-            println!("{:?}({:?})\r", b, c);
-        }
-
-        if c == 'q' {
-            process::exit(-1)
+    for key in io::stdin().keys() {
+        match key {
+            Ok(key) => match key {
+                Key::Ctrl('q') => break,
+                Key::Ctrl(c) => {
+                    println!("control: {:?}\r", c);
+                }
+                Key::Char(c) => {
+                    println!("char {:?}\r", c);
+                }
+                _ => (),
+            },
+            Err(err) => die(err),
         }
     }
 
