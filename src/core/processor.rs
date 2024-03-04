@@ -17,7 +17,7 @@ impl Processor {
     }
 
     /// 读取按键
-    fn read_key() -> Result<Key, io::Error> {
+    pub fn read_key() -> Result<Key, io::Error> {
         loop {
             if let Some(key) = io::stdin().lock().keys().next() {
                 return key;

@@ -10,7 +10,6 @@ use super::{
 ///external crate
 use std::{
     cell::RefCell,
-    fmt::format,
     io::stdout,
     time::{Duration, Instant},
     usize,
@@ -111,14 +110,7 @@ impl Editor {
     fn editor_processor(&self, key: Key) {
         match key {
             Key::Ctrl('q') => self.set_should_quit(true),
-            Key::Ctrl('s') => {
-                let mut status_message = self.status_message.borrow_mut();
-                if self.document.borrow().save().is_ok() {
-                    status_message.text = "File saved successfully".to_string()
-                } else {
-                    status_message.text = "Error writing file!".to_string()
-                }
-            }
+            Key::Ctrl('s') => self.save(),
             Key::Char(c) => {
                 self.insert_chat_at_document(c);
                 self.move_cursor(Key::Right)
@@ -221,6 +213,60 @@ impl Editor {
         text.truncate(self.terminal.size().width as usize);
         self.terminal.draw_row(&text);
         // }
+    }
+    /// 让用户根据提示输入内容
+    fn prompt(&self, prompt: &str) -> Result<Option<String>, std::io::Error> {
+        let mut result = String::new();
+        let mut status_message = self.status_message.borrow_mut();
+        loop {
+            status_message.text = format!("{}{}", prompt, result);
+            self.refresh_editor_screen()?;
+            match Processor::read_key()? {
+                Key::Backspace => {
+                    if !result.is_empty() {
+                        result.truncate(result.len() - 1)
+                    }
+                }
+                Key::Char('\n') => break,
+                Key::Char(c) => {
+                    if !c.is_control() {
+                        result.push(c)
+                    }
+                }
+                Key::Esc => {
+                    result.truncate(0);
+                    break;
+                }
+                _ => (),
+            }
+        }
+        status_message.text = String::new();
+        if result.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(result))
+    }
+
+    /// 保存文件
+    fn save(&self) {
+        let mut document = self.document.borrow_mut();
+        let mut status_message = self.status_message.borrow_mut();
+        if document.file_name.is_none() {
+            // 获取名称, 默认为(None)
+            let new_name = self.prompt("Save as: ").unwrap_or(None);
+            if new_name.is_none() {
+                status_message.text = "Save aborted.".to_string();
+                return;
+            }
+            document.file_name = new_name;
+        }
+        // 输出保存信息
+        status_message.text = if document.save().is_ok() {
+            "File saved successfully.".to_string()
+        } else {
+            "Error writing file!".to_string()
+        }
     }
 
     /// 文本编辑器打开后或运行时新行 绘制波浪线
