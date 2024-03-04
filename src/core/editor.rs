@@ -111,6 +111,14 @@ impl Editor {
     fn editor_processor(&self, key: Key) {
         match key {
             Key::Ctrl('q') => self.set_should_quit(true),
+            Key::Ctrl('s') => {
+                let mut status_message = self.status_message.borrow_mut();
+                if self.document.borrow().save().is_ok() {
+                    status_message.text = "File saved successfully".to_string()
+                } else {
+                    status_message.text = "Error writing file!".to_string()
+                }
+            }
             Key::Char(c) => {
                 self.insert_chat_at_document(c);
                 self.move_cursor(Key::Right)
@@ -372,11 +380,6 @@ impl Editor {
     /// 当前光标处删除字符
     fn delete_chat_at_document(&self) {
         let cursor_position = &self.get_cursor_position();
-        (*self.status_message.borrow_mut()).text = format!(
-            "{:?} {:?}",
-            cursor_position,
-            self.document.borrow_mut().row(cursor_position.y)
-        );
 
         if cursor_position.x > 0 || cursor_position.y > 0 {
             self.document.borrow_mut().delete(cursor_position);

@@ -1,4 +1,7 @@
-use std::fs;
+use std::{
+    fs,
+    io::{Error, Write},
+};
 
 use super::{editor::Position, row::Row};
 
@@ -75,6 +78,18 @@ impl Document {
             let row = self.rows.get_mut(at.y).unwrap();
             row.delete(at.x)
         };
+    }
+
+    /// 保存修改后的文本
+    pub fn save(&self) -> Result<(), Error> {
+        if let Some(file_name) = &self.file_name {
+            let mut file = fs::File::create(file_name)?;
+            for row in &self.rows {
+                file.write_all(row.as_bytes())?;
+                file.write_all(b"\n")?;
+            }
+        }
+        Ok(())
     }
 
     /// 获取指定行

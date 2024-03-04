@@ -83,6 +83,11 @@ impl Row {
         self.update_len()
     }
 
+    /// 转换为字节流
+    pub fn as_bytes(&self) -> &[u8] {
+        self.text.as_bytes()
+    }
+
     /// 字符串字位长度
     pub fn len(&self) -> usize {
         self.text[..].graphemes(true).count()
