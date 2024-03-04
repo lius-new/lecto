@@ -66,6 +66,17 @@ impl Row {
         self.update_len()
     }
 
+    /// 分割字符串(回车创建一个新行)
+    /// 如果是在行中间, 那么就将当前行分为两部分, 第一部分作为新的当前行, 另一部分作为新行返回出去
+    /// 如果是在行皆为, 那么当前行不发生变化, 会有一个空的字符串作为新行返回出去
+    pub fn split(&mut self, at: usize) -> Self {
+        let begining: String = self.text[..].graphemes(true).take(at).collect();
+        let remainder: String = self.text[..].graphemes(true).skip(at).collect();
+        self.text = begining;
+        self.update_len();
+        Self::from(&remainder[..])
+    }
+
     /// 追加新的行
     pub fn append(&mut self, new: &Self) {
         self.text = format!("{}{}", self.text, new.text);

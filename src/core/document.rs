@@ -23,9 +23,28 @@ impl Document {
             file_name: Some(filename.to_string()),
         })
     }
+    /// 插入新行
+    pub fn insert_new_line(&mut self, at: &Position) {
+        // 大于文档长度
+        if at.y > self.len() {
+            return;
+        }
+        // 如果是最后一行直接追加
+        if at.y == self.len() {
+            self.rows.push(Row::default());
+            return;
+        }
+
+        let new_row = self.rows.get_mut(at.y).unwrap().split(at.x);
+        self.rows.insert(at.y + 1, new_row)
+    }
 
     /// 插入字符
     pub fn inesrt(&mut self, at: &Position, c: char) {
+        if c == '\n' {
+            self.insert_new_line(at);
+            return;
+        }
         if at.y == self.len() {
             let mut row = Row::default();
             row.insert(0, c);
