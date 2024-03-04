@@ -10,6 +10,7 @@ use super::{
 ///external crate
 use std::{
     cell::RefCell,
+    fmt::format,
     io::stdout,
     time::{Duration, Instant},
     usize,
@@ -371,6 +372,11 @@ impl Editor {
     /// 当前光标处删除字符
     fn delete_chat_at_document(&self) {
         let cursor_position = &self.get_cursor_position();
+        (*self.status_message.borrow_mut()).text = format!(
+            "{:?} {:?}",
+            cursor_position,
+            self.document.borrow_mut().row(cursor_position.y)
+        );
 
         if cursor_position.x > 0 || cursor_position.y > 0 {
             self.document.borrow_mut().delete(cursor_position);

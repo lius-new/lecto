@@ -66,6 +66,12 @@ impl Row {
         self.update_len()
     }
 
+    /// 追加新的行
+    pub fn append(&mut self, new: &Self) {
+        self.text = format!("{}{}", self.text, new.text);
+        self.update_len()
+    }
+
     /// 字符串字位长度
     pub fn len(&self) -> usize {
         self.text[..].graphemes(true).count()

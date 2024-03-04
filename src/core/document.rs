@@ -37,12 +37,25 @@ impl Document {
     }
     /// 删除字符
     pub fn delete(&mut self, at: &Position) {
-        // 大于文档长度
-        if at.y >= self.len() {
+        let len = self.len();
+
+        // 大于文档长度, 不在删除的范围内
+        if at.y >= len {
             return;
         }
-        let row = self.rows.get_mut(at.y).unwrap();
-        row.delete(at.x)
+
+        // 光标在x轴是最后一个字符以及光标不是最后一行(光标是否在一行末尾及是否是最后一个字符 --> 行为空(x:0,len:0))
+        // 事实上删除前会向前移动, 此时如果行首, 那么会跳到前一行
+        // 假设前一行是空行且当前在{x:0,y:5,len:10}, 此时删除前会光标会是{x:0,y:4,len:0}, 此时下一行就会移动到上一行去
+        // 假设前一行不是空行(len=8)且当前在{x:0,y:5,len:10},此时删除光标为{x:8(上一行的末尾位置等于长度),y:4,len:8}, 此时下一行也会移动到上一行去
+        if at.x == self.rows.get_mut(at.y).unwrap().len() && at.y < len - 1 {
+            let next_row = self.rows.remove(at.y + 1);
+            let row = self.rows.get_mut(at.y).unwrap();
+            row.append(&next_row)
+        } else {
+            let row = self.rows.get_mut(at.y).unwrap();
+            row.delete(at.x)
+        };
     }
 
     /// 获取指定行
