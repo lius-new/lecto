@@ -2,9 +2,10 @@ use std::fs;
 
 use super::row::Row;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Document {
     rows: Vec<Row>,
+    pub file_name: Option<String>,
 }
 
 impl Document {
@@ -17,7 +18,10 @@ impl Document {
             rows.push(Row::from(value));
         }
 
-        Ok(Self { rows })
+        Ok(Self {
+            rows,
+            file_name: Some(filename.to_string()),
+        })
     }
 
     /// 获取指定行

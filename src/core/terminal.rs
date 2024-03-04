@@ -1,10 +1,13 @@
+use super::editor::Position;
 /// external crate
 use std::{
-    io::{self, Write},
+    io::{self, stdout, Write},
     usize,
 };
-
-use super::editor::Position;
+use termion::{
+    color::{self},
+    raw::{IntoRawMode, RawTerminal},
+};
 
 #[derive(Debug)]
 pub struct Size {
@@ -14,13 +17,18 @@ pub struct Size {
 
 pub struct Terminal {
     size: Size,
+    _stdout: RawTerminal<std::io::Stdout>,
 }
 
 impl Default for Terminal {
     fn default() -> Self {
         let (width, height) = termion::terminal_size().unwrap();
         Self {
-            size: Size { width, height },
+            size: Size {
+                width,
+                height: height - 2,
+            },
+            _stdout: stdout().into_raw_mode().unwrap(),
         }
     }
 }
@@ -74,5 +82,22 @@ impl Terminal {
     /// 刷新输出流
     pub fn flush(&self) -> Result<(), std::io::Error> {
         io::stdout().flush()
+    }
+
+    /// 设置背景颜色
+    pub fn set_bg_color(color: color::Rgb) {
+        print!("{}", color::Bg(color))
+    }
+    /// 重置背景颜色
+    pub fn reset_bg_color() {
+        print!("{}", color::Bg(color::Reset))
+    }
+    /// 设置前景颜色
+    pub fn set_fg_color(color: color::Rgb) {
+        print!("{}", color::Fg(color))
+    }
+    /// 重置前景颜色
+    pub fn reset_fg_color() {
+        print!("{}", color::Fg(color::Reset))
     }
 }

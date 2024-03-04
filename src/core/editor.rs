@@ -8,7 +8,12 @@ use super::{
     utils::{self, die},
 };
 ///external crate
-use std::{cell::RefCell, io::stdout, usize};
+use std::{
+    cell::RefCell,
+    io::stdout,
+    time::{Duration, Instant},
+    usize,
+};
 use termion::{event::Key, raw::IntoRawMode};
 
 /// 编辑器中光标位置
@@ -26,6 +31,18 @@ impl Position {
         self.y = y;
     }
 }
+struct StatusMessage {
+    text: String,
+    time: Instant,
+}
+impl StatusMessage {
+    fn from(message: String) -> Self {
+        Self {
+            time: Instant::now(),
+            text: message,
+        }
+    }
+}
 
 /// 编辑器类型
 pub struct Editor {
@@ -36,12 +53,20 @@ pub struct Editor {
     terminal: Terminal,
     processor: Processor,
     document: Document,
+    status_message: StatusMessage,
 }
 impl Default for Editor {
     fn default() -> Self {
         // 通过是否存在filename参数来构建不同的Document实例
+        let mut initial_status = String::from("HELP: Ctrl-Q=quit");
         let document = if let Some(filename) = Processor::read_filename_for_command() {
-            Document::open(&filename).unwrap_or_default()
+            let doc = Document::open(&filename);
+            if doc.is_ok() {
+                doc.unwrap()
+            } else {
+                initial_status = format!("Err Cloud not open file:{}", filename);
+                Document::default()
+            }
         } else {
             Document::default()
         };
@@ -53,6 +78,7 @@ impl Default for Editor {
             offset: RefCell::new(Position::default()),
             terminal: Terminal::default(),
             processor: Processor::default(),
+            status_message: StatusMessage::from(initial_status),
             document,
         }
     }
@@ -102,10 +128,16 @@ impl Editor {
         self.terminal.cursor_hide();
         self.terminal.cursor_position(&Position::default());
         self.draw_start_running_symbol();
+        self.draw_status_bar();
+        self.draw_message_bar();
         // 设置光标的位置, 此时光标和文本偏移绑定到一起了.
         // 假设正如scroll方法描述, 当向下碰到边界并越过时(第一次碰到)，此时y = 8, offset = 1,所以光标为 8 -1 = 7, 此时光标就是为最后一行位置. 如果一直就y=9 offset = 2,光标7,...
         // 假设正如scroll方法描述, 当向上碰到边界并越过时，此时y = 0, offset = 1,所以光标为 0 - 1 = 0 (saturating_sub), 此时光标是为第一行位置. 如果一直就y=0 offset = 0,光标0,...
-        self.terminal.cursor_position(&self.get_cursor_position());
+        let Position { x, y } = self.get_cursor_position();
+        self.terminal.cursor_position(&Position {
+            x: x.saturating_sub(self.get_offset().x),
+            y: y.saturating_sub(self.get_offset().y),
+        });
         self.terminal.cursor_show();
         self.terminal.flush()
     }
@@ -133,11 +165,50 @@ impl Editor {
             .draw_row_text_center("~", &format!("Version: {}", constants::VERSION));
         self.set_show_welcome(false);
     }
+    /// 绘制状态栏
+    fn draw_status_bar(&self) {
+        let mut status;
+        let width = self.terminal.size().width as usize;
+        let mut file_name = "[No Name]".to_string();
+        if let Some(name) = &self.document.file_name {
+            file_name = name.clone();
+            file_name.truncate(20);
+        }
+        status = format!("{} - {} lines", file_name, self.document.len());
+        let line_indicator = format!(
+            "{}/{}",
+            self.get_cursor_position().y.saturating_add(1),
+            self.document.len()
+        );
+        let len = status.len() + line_indicator.len();
+
+        if width > len {
+            status.push_str(&" ".repeat(width - len))
+        }
+        status = format!("{}{}", status, line_indicator);
+        status.truncate(width);
+        Terminal::set_bg_color(constants::STATUS_BG_COLOR);
+        Terminal::set_fg_color(constants::STATUS_FG_COLOR);
+        self.terminal.draw_row(&status);
+        Terminal::reset_fg_color();
+        Terminal::reset_bg_color();
+    }
+
+    /// 绘制消息提示
+    fn draw_message_bar(&self) {
+        self.terminal.clear_current_line();
+        let message = &self.status_message;
+        if Instant::now() - message.time < Duration::new(5, 0) {
+            let mut text = message.text.clone();
+            text.truncate(self.terminal.size().width as usize);
+            self.terminal.draw_row(&text);
+        }
+    }
 
     /// 文本编辑器打开后或运行时新行 绘制波浪线
     pub fn draw_start_running_symbol(&self) {
         let height = self.terminal.size().height;
-        for terminal_row in 0..height - 1 {
+        for terminal_row in 0..height {
             self.terminal.clear_current_line();
 
             // 如果有绘制内容就绘制(每次移动窗口内容都会重新绘制. 实际上只有offset.y发生变化才会导致现实的内容的重新绘制)
@@ -193,33 +264,76 @@ impl Editor {
     /// 移动光标
     pub fn move_cursor(&self, key: Key) {
         let mut cursor_postion = self.cursor_position.borrow_mut();
-        let (x, y) = (cursor_postion.x, cursor_postion.y);
+        let (mut x, mut y) = (cursor_postion.x, cursor_postion.y);
 
         let height = if !self.document.is_empty() {
             self.document.len()
         } else {
             self.terminal.size().height.saturating_sub(1) as usize
         };
-        let width = self.terminal.size().width.saturating_sub(1) as usize;
+        let mut width = if let Some(row) = self.document.row(y) {
+            row.len()
+        } else {
+            0
+            // self.terminal.size().width.saturating_sub(1) as usize
+        };
+        let terminal_height = self.terminal.size().height as usize;
         match key {
-            Key::Up => cursor_postion.set_position_y(y.saturating_sub(1)),
+            Key::Up => y = y.saturating_sub(1),
             Key::Down => {
                 if y < height {
-                    cursor_postion.set_position_y(y.saturating_add(1))
+                    y = y.saturating_add(1)
                 }
             }
-            Key::Left => cursor_postion.set_position_x(x.saturating_sub(1)),
+            Key::Left => {
+                if x > 0 {
+                    x -= 1;
+                } else if y > 0 {
+                    y -= 1;
+                    if let Some(row) = self.document.row(y) {
+                        x = row.len()
+                    } else {
+                        x = 0;
+                    }
+                }
+            }
             Key::Right => {
                 if x < width {
-                    cursor_postion.set_position_x(x.saturating_add(1))
+                    x += 1;
+                } else if y < height {
+                    y += 1;
+                    x = 0;
                 }
             }
-            Key::PageUp => cursor_postion.set_position_y(0),
-            Key::PageDown => cursor_postion.set_position_y(height),
-            Key::Home => cursor_postion.set_position_x(0),
-            Key::End => cursor_postion.set_position_x(width),
+            Key::PageUp => {
+                y = if y > terminal_height {
+                    y - terminal_height
+                } else {
+                    0
+                }
+            }
+            Key::PageDown => {
+                y = if y.saturating_add(terminal_height) < height {
+                    y + terminal_height as usize
+                } else {
+                    height
+                }
+            }
+            Key::Home => x = 0,
+            Key::End => x = width,
             _ => (),
         }
+
+        width = if let Some(row) = self.document.row(y) {
+            row.len()
+        } else {
+            0
+        };
+        if x > width {
+            x = width;
+        }
+        cursor_postion.set_position_x(x);
+        cursor_postion.set_position_y(y);
     }
 
     fn get_show_welcome(&self) -> bool {
