@@ -52,7 +52,7 @@ pub struct Editor {
     offset: RefCell<Position>,          // 读文件时文本在窗口中文档的偏移量
     terminal: Terminal,
     processor: Processor,
-    document: Document,
+    document: RefCell<Document>,
     status_message: StatusMessage,
 }
 impl Default for Editor {
@@ -79,7 +79,7 @@ impl Default for Editor {
             terminal: Terminal::default(),
             processor: Processor::default(),
             status_message: StatusMessage::from(initial_status),
-            document,
+            document: RefCell::new(document),
         }
     }
 }
@@ -110,6 +110,7 @@ impl Editor {
     fn editor_processor(&self, key: Key) {
         match key {
             Key::Ctrl('q') => self.set_should_quit(true),
+            Key::Char(c) => self.insert_chat_at_document(c),
             Key::Up
             | Key::Down
             | Key::Left
@@ -170,15 +171,16 @@ impl Editor {
         let mut status;
         let width = self.terminal.size().width as usize;
         let mut file_name = "[No Name]".to_string();
-        if let Some(name) = &self.document.file_name {
+        let document = self.document.borrow();
+        if let Some(name) = &document.file_name {
             file_name = name.clone();
             file_name.truncate(20);
         }
-        status = format!("{} - {} lines", file_name, self.document.len());
+        status = format!("{} - {} lines", file_name, &document.len());
         let line_indicator = format!(
             "{}/{}",
             self.get_cursor_position().y.saturating_add(1),
-            self.document.len()
+            &document.len()
         );
         let len = status.len() + line_indicator.len();
 
@@ -208,6 +210,7 @@ impl Editor {
     /// 文本编辑器打开后或运行时新行 绘制波浪线
     pub fn draw_start_running_symbol(&self) {
         let height = self.terminal.size().height;
+        let document = self.document.borrow();
         for terminal_row in 0..height {
             self.terminal.clear_current_line();
 
@@ -216,15 +219,9 @@ impl Editor {
             // 那么从上至下正常显示。1-1，2-2，3-3=>窗口第一行显示文本第一行,窗口第二行显示文本第二行,...
             // 当向下移动到第8行时为: 1-8，2-9，3-10=>窗口第一行显示文本第八行,窗口第二行显示文本第九行,...
             // 当向上移动到第7行时为: 1-7，2-8，3-9=>窗口第一行显示文本第七行,窗口第二行显示文本第八行,...
-            if let Some(row) = self
-                .document
-                .row(terminal_row as usize + self.get_offset().y)
-            {
+            if let Some(row) = document.row(terminal_row as usize + self.get_offset().y) {
                 self.draw_document_row(row);
-            } else if terminal_row == height / 2
-                && self.get_show_welcome()
-                && self.document.is_empty()
-            {
+            } else if terminal_row == height / 2 && self.get_show_welcome() && document.is_empty() {
                 self.draw_welcome_message();
             } else {
                 self.terminal.draw_row("~");
@@ -265,13 +262,14 @@ impl Editor {
     pub fn move_cursor(&self, key: Key) {
         let mut cursor_postion = self.cursor_position.borrow_mut();
         let (mut x, mut y) = (cursor_postion.x, cursor_postion.y);
+        let document = self.document.borrow();
 
-        let height = if !self.document.is_empty() {
-            self.document.len()
+        let height = if !document.is_empty() {
+            document.len()
         } else {
             self.terminal.size().height.saturating_sub(1) as usize
         };
-        let mut width = if let Some(row) = self.document.row(y) {
+        let mut width = if let Some(row) = document.row(y) {
             row.len()
         } else {
             0
@@ -290,7 +288,7 @@ impl Editor {
                     x -= 1;
                 } else if y > 0 {
                     y -= 1;
-                    if let Some(row) = self.document.row(y) {
+                    if let Some(row) = document.row(y) {
                         x = row.len()
                     } else {
                         x = 0;
@@ -324,7 +322,7 @@ impl Editor {
             _ => (),
         }
 
-        width = if let Some(row) = self.document.row(y) {
+        width = if let Some(row) = document.row(y) {
             row.len()
         } else {
             0
@@ -334,6 +332,7 @@ impl Editor {
         }
         cursor_postion.set_position_x(x);
         cursor_postion.set_position_y(y);
+        print!("{}\r", y)
     }
 
     fn get_show_welcome(&self) -> bool {
@@ -357,5 +356,12 @@ impl Editor {
     /// 获取offset(偏移量)
     fn get_offset(&self) -> Position {
         *self.offset.borrow()
+    }
+    /// 当前光标处插入字符
+    fn insert_chat_at_document(&self, c: char) {
+        let mut cursor_position = self.get_cursor_position();
+        cursor_position.set_position_y(cursor_position.y.saturating_add(1));
+        self.document.borrow_mut().inesrt(&cursor_position, c);
+        self.move_cursor(Key::Right);
     }
 }

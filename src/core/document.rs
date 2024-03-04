@@ -1,6 +1,6 @@
 use std::fs;
 
-use super::row::Row;
+use super::{editor::Position, row::Row};
 
 #[derive(Default, Debug)]
 pub struct Document {
@@ -22,6 +22,18 @@ impl Document {
             rows,
             file_name: Some(filename.to_string()),
         })
+    }
+
+    /// 插入字符
+    pub fn inesrt(&mut self, at: &Position, c: char) {
+        if at.y == self.len() {
+            let mut row = Row::default();
+            row.insert(0, c);
+            self.rows.push(row)
+        } else if at.y < self.len() {
+            let row = self.rows.get_mut(at.y).unwrap();
+            row.insert(at.x, c);
+        }
     }
 
     /// 获取指定行
