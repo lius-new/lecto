@@ -26,7 +26,7 @@ impl Default for Terminal {
         Self {
             size: Size {
                 width,
-                height: height - 2,
+                height: height.saturating_sub(3),
             },
             _stdout: stdout().into_raw_mode().unwrap(),
         }

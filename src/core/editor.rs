@@ -53,7 +53,7 @@ pub struct Editor {
     terminal: Terminal,
     processor: Processor,
     document: RefCell<Document>,
-    status_message: StatusMessage,
+    status_message: RefCell<StatusMessage>,
 }
 impl Default for Editor {
     fn default() -> Self {
@@ -78,7 +78,7 @@ impl Default for Editor {
             offset: RefCell::new(Position::default()),
             terminal: Terminal::default(),
             processor: Processor::default(),
-            status_message: StatusMessage::from(initial_status),
+            status_message: RefCell::new(StatusMessage::from(initial_status)),
             document: RefCell::new(document),
         }
     }
@@ -110,7 +110,14 @@ impl Editor {
     fn editor_processor(&self, key: Key) {
         match key {
             Key::Ctrl('q') => self.set_should_quit(true),
-            Key::Char(c) => self.insert_chat_at_document(c),
+            Key::Char(c) => {
+                self.insert_chat_at_document(c);
+                self.move_cursor(Key::Right)
+            }
+            Key::Backspace => {
+                self.move_cursor(Key::Left);
+                self.delete_chat_at_document()
+            }
             Key::Up
             | Key::Down
             | Key::Left
@@ -199,12 +206,12 @@ impl Editor {
     /// 绘制消息提示
     fn draw_message_bar(&self) {
         self.terminal.clear_current_line();
-        let message = &self.status_message;
-        if Instant::now() - message.time < Duration::new(5, 0) {
-            let mut text = message.text.clone();
-            text.truncate(self.terminal.size().width as usize);
-            self.terminal.draw_row(&text);
-        }
+        let message = &self.status_message.borrow();
+        // if Instant::now() - message.time < Duration::new(5, 0) {
+        let mut text = message.text.clone();
+        text.truncate(self.terminal.size().width as usize);
+        self.terminal.draw_row(&text);
+        // }
     }
 
     /// 文本编辑器打开后或运行时新行 绘制波浪线
@@ -332,7 +339,6 @@ impl Editor {
         }
         cursor_postion.set_position_x(x);
         cursor_postion.set_position_y(y);
-        print!("{}\r", y)
     }
 
     fn get_show_welcome(&self) -> bool {
@@ -359,9 +365,15 @@ impl Editor {
     }
     /// 当前光标处插入字符
     fn insert_chat_at_document(&self, c: char) {
-        let mut cursor_position = self.get_cursor_position();
-        cursor_position.set_position_y(cursor_position.y.saturating_add(1));
-        self.document.borrow_mut().inesrt(&cursor_position, c);
-        self.move_cursor(Key::Right);
+        let cursor_position = &self.get_cursor_position();
+        self.document.borrow_mut().inesrt(cursor_position, c);
+    }
+    /// 当前光标处删除字符
+    fn delete_chat_at_document(&self) {
+        let cursor_position = &self.get_cursor_position();
+
+        if cursor_position.x > 0 || cursor_position.y > 0 {
+            self.document.borrow_mut().delete(cursor_position);
+        }
     }
 }

@@ -35,6 +35,15 @@ impl Document {
             row.insert(at.x, c);
         }
     }
+    /// 删除字符
+    pub fn delete(&mut self, at: &Position) {
+        // 大于文档长度
+        if at.y >= self.len() {
+            return;
+        }
+        let row = self.rows.get_mut(at.y).unwrap();
+        row.delete(at.x)
+    }
 
     /// 获取指定行
     pub fn row(&self, index: usize) -> Option<&Row> {

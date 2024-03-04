@@ -50,6 +50,21 @@ impl Row {
         }
         self.update_len();
     }
+    /// 删除字符
+    /// at表示x坐标,len表示行长度
+    /// 当x大于行长度时
+    pub fn delete(&mut self, at: usize) {
+        if at >= self.len() {
+            return;
+        } else {
+            // result 获取的是前面的at之前的字符, remainder是获取at之后的字符
+            let mut result: String = self.text[..].graphemes(true).take(at).collect();
+            let remainder: String = self.text[..].graphemes(true).skip(at + 1).collect();
+            result.push_str(&remainder);
+            self.text = result;
+        }
+        self.update_len()
+    }
 
     /// 字符串字位长度
     pub fn len(&self) -> usize {
