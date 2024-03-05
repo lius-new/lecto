@@ -260,11 +260,15 @@ impl Editor {
 
     /// 退出
     fn exit(&self) {
-        let exit_value = self.prompt("Exit(y/n): ").unwrap_or(None);
-        if let Some(exit_value) = exit_value {
-            if exit_value.to_lowercase() == "y" {
-                self.set_should_quit(true)
+        if self.document.borrow().is_dirty() {
+            let exit_value = self.prompt("Exit(y/n): ").unwrap_or(None);
+            if let Some(exit_value) = exit_value {
+                if exit_value.to_lowercase() == "y" {
+                    self.set_should_quit(true)
+                }
             }
+        } else {
+            self.set_should_quit(true)
         }
     }
 
