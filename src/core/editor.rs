@@ -109,7 +109,7 @@ impl Editor {
     /// 文本编辑器处理案件的函数
     fn editor_processor(&self, key: Key) {
         match key {
-            Key::Ctrl('q') => self.set_should_quit(true),
+            Key::Ctrl('q') => self.exit(),
             Key::Ctrl('s') => self.save(),
             Key::Char(c) => {
                 self.insert_chat_at_document(c);
@@ -256,6 +256,16 @@ impl Editor {
         }
 
         Ok(Some(result))
+    }
+
+    /// 退出
+    fn exit(&self) {
+        let exit_value = self.prompt("Exit(y/n): ").unwrap_or(None);
+        if let Some(exit_value) = exit_value {
+            if exit_value.to_lowercase() == "y" {
+                self.set_should_quit(true)
+            }
+        }
     }
 
     /// 保存文件
