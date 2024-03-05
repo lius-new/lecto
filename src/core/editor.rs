@@ -33,12 +33,12 @@ impl Position {
 }
 struct StatusMessage {
     text: String,
-    time: Instant,
+    _time: Instant,
 }
 impl StatusMessage {
     fn from(message: String) -> Self {
         Self {
-            time: Instant::now(),
+            _time: Instant::now(),
             text: message,
         }
     }
@@ -207,9 +207,9 @@ impl Editor {
     /// 绘制消息提示
     fn draw_message_bar(&self) {
         self.terminal.clear_current_line();
-        let message = &self.status_message.borrow();
+        let message = &self.status_message;
         // if Instant::now() - message.time < Duration::new(5, 0) {
-        let mut text = message.text.clone();
+        let mut text = message.borrow().text.clone();
         text.truncate(self.terminal.size().width as usize);
         self.terminal.draw_row(&text);
         // }
@@ -217,9 +217,8 @@ impl Editor {
     /// 让用户根据提示输入内容
     fn prompt(&self, prompt: &str) -> Result<Option<String>, std::io::Error> {
         let mut result = String::new();
-        let mut status_message = self.status_message.borrow_mut();
         loop {
-            status_message.text = format!("{}{}", prompt, result);
+            self.rewrite_status_message(&format!("{}{}", prompt, result));
             self.refresh_editor_screen()?;
             match Processor::read_key()? {
                 Key::Backspace => {
@@ -240,7 +239,7 @@ impl Editor {
                 _ => (),
             }
         }
-        status_message.text = String::new();
+        self.rewrite_status_message("");
         if result.is_empty() {
             return Ok(None);
         }
@@ -250,23 +249,23 @@ impl Editor {
 
     /// 保存文件
     fn save(&self) {
-        let mut document = self.document.borrow_mut();
-        let mut status_message = self.status_message.borrow_mut();
-        if document.file_name.is_none() {
+        if self.get_documnet_filename().is_none() {
             // 获取名称, 默认为(None)
             let new_name = self.prompt("Save as: ").unwrap_or(None);
             if new_name.is_none() {
-                status_message.text = "Save aborted.".to_string();
+                self.rewrite_status_message("Save aborted.");
                 return;
             }
-            document.file_name = new_name;
+            self.reset_document_filename(new_name)
         }
         // 输出保存信息
-        status_message.text = if document.save().is_ok() {
+
+        let text = if self.document.borrow().save().is_ok() {
             "File saved successfully.".to_string()
         } else {
             "Error writing file!".to_string()
-        }
+        };
+        self.rewrite_status_message(&text)
     }
 
     /// 文本编辑器打开后或运行时新行 绘制波浪线
@@ -418,6 +417,15 @@ impl Editor {
     fn get_offset(&self) -> Position {
         *self.offset.borrow()
     }
+    /// 获取document中的文件名
+    fn get_documnet_filename(&self) -> Option<String> {
+        self.document.borrow().file_name.clone()
+    }
+    /// 修改document中的文件名
+    fn reset_document_filename(&self, filename: Option<String>) {
+        let mut document = self.document.borrow_mut();
+        document.file_name = filename
+    }
     /// 当前光标处插入字符
     fn insert_chat_at_document(&self, c: char) {
         let cursor_position = &self.get_cursor_position();
@@ -430,5 +438,11 @@ impl Editor {
         if cursor_position.x > 0 || cursor_position.y > 0 {
             self.document.borrow_mut().delete(cursor_position);
         }
+    }
+
+    /// 修改status_message
+    fn rewrite_status_message(&self, text: &str) {
+        let mut statue_message = self.status_message.borrow_mut();
+        statue_message.text = String::from(text);
     }
 }
