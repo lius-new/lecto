@@ -8,6 +8,7 @@ use super::{editor::Position, row::Row};
 #[derive(Default, Debug)]
 pub struct Document {
     rows: Vec<Row>,
+    dirty: bool,
     pub file_name: Option<String>,
 }
 
@@ -24,14 +25,11 @@ impl Document {
         Ok(Self {
             rows,
             file_name: Some(filename.to_string()),
+            dirty: false,
         })
     }
     /// 插入新行
     pub fn insert_new_line(&mut self, at: &Position) {
-        // 大于文档长度
-        if at.y > self.len() {
-            return;
-        }
         // 如果是最后一行直接追加
         if at.y == self.len() {
             self.rows.push(Row::default());
@@ -44,6 +42,12 @@ impl Document {
 
     /// 插入字符
     pub fn inesrt(&mut self, at: &Position, c: char) {
+        // 大于文档长度
+        if at.y > self.len() {
+            return;
+        }
+        self.dirty = true;
+
         if c == '\n' {
             self.insert_new_line(at);
             return;
@@ -52,7 +56,7 @@ impl Document {
             let mut row = Row::default();
             row.insert(0, c);
             self.rows.push(row)
-        } else if at.y < self.len() {
+        } else {
             let row = self.rows.get_mut(at.y).unwrap();
             row.insert(at.x, c);
         }
@@ -65,6 +69,7 @@ impl Document {
         if at.y >= len {
             return;
         }
+        self.dirty = true;
 
         // 光标在x轴是最后一个字符以及光标不是最后一行(光标是否在一行末尾及是否是最后一个字符 --> 行为空(x:0,len:0))
         // 事实上删除前会向前移动, 此时如果行首, 那么会跳到前一行
@@ -81,13 +86,14 @@ impl Document {
     }
 
     /// 保存修改后的文本
-    pub fn save(&self) -> Result<(), Error> {
+    pub fn save(&mut self) -> Result<(), Error> {
         if let Some(file_name) = &self.file_name {
             let mut file = fs::File::create(file_name)?;
             for row in &self.rows {
                 file.write_all(row.as_bytes())?;
                 file.write_all(b"\n")?;
             }
+            self.dirty = false
         }
         Ok(())
     }
@@ -101,7 +107,10 @@ impl Document {
     pub fn is_empty(&self) -> bool {
         self.rows.is_empty()
     }
-
+    /// 判断文档是否被修改
+    pub fn is_dirty(&self) -> bool {
+        self.dirty
+    }
     /// 文档长度(多少行)
     pub fn len(&self) -> usize {
         self.rows.len()

@@ -33,12 +33,12 @@ impl Position {
 }
 struct StatusMessage {
     text: String,
-    _time: Instant,
+    time: Instant,
 }
 impl StatusMessage {
     fn from(message: String) -> Self {
         Self {
-            _time: Instant::now(),
+            time: Instant::now(),
             text: message,
         }
     }
@@ -178,13 +178,24 @@ impl Editor {
     fn draw_status_bar(&self) {
         let mut status;
         let width = self.terminal.size().width as usize;
-        let mut file_name = "[No Name]".to_string();
         let document = self.document.borrow();
+        let modified_indicator = if document.is_dirty() {
+            "(modified)"
+        } else {
+            ""
+        };
+
+        let mut file_name = "[No Name]".to_string();
         if let Some(name) = &document.file_name {
             file_name = name.clone();
             file_name.truncate(20);
         }
-        status = format!("{} - {} lines", file_name, &document.len());
+        status = format!(
+            "{} - {} lines{}",
+            file_name,
+            &document.len(),
+            modified_indicator
+        );
         let line_indicator = format!(
             "{}/{}",
             self.get_cursor_position().y.saturating_add(1),
@@ -207,12 +218,12 @@ impl Editor {
     /// 绘制消息提示
     fn draw_message_bar(&self) {
         self.terminal.clear_current_line();
-        let message = &self.status_message;
-        // if Instant::now() - message.time < Duration::new(5, 0) {
-        let mut text = message.borrow().text.clone();
-        text.truncate(self.terminal.size().width as usize);
-        self.terminal.draw_row(&text);
-        // }
+        let message = self.status_message.borrow();
+        if Instant::now() - message.time < Duration::new(5, 0) {
+            let mut text = message.text.clone();
+            text.truncate(self.terminal.size().width as usize);
+            self.terminal.draw_row(&text);
+        }
     }
     /// 让用户根据提示输入内容
     fn prompt(&self, prompt: &str) -> Result<Option<String>, std::io::Error> {
@@ -259,8 +270,7 @@ impl Editor {
             self.reset_document_filename(new_name)
         }
         // 输出保存信息
-
-        let text = if self.document.borrow().save().is_ok() {
+        let text = if self.save_document().is_ok() {
             "File saved successfully.".to_string()
         } else {
             "Error writing file!".to_string()
@@ -425,6 +435,9 @@ impl Editor {
     fn reset_document_filename(&self, filename: Option<String>) {
         let mut document = self.document.borrow_mut();
         document.file_name = filename
+    }
+    fn save_document(&self) -> Result<(), std::io::Error> {
+        self.document.borrow_mut().save()
     }
     /// 当前光标处插入字符
     fn insert_chat_at_document(&self, c: char) {
